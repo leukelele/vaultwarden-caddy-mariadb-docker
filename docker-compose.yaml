@@ -1,0 +1,58 @@
+services:
+  mariadb:
+    image: mariadb:latest
+    container_name: mariadb
+    restart: always
+    env_file:
+      - .env
+    volumes:
+      - mariadb_vol:/var/lib/mysql
+#     - /etc/localtime:/etc/localtime:ro  # the wiki include this but it causes 
+                                          # the domain to return a blank window, 
+                                          # will have to comment out for now
+    networks:
+      - vw_net
+
+  vaultwarden:
+    image: vaultwarden/server:latest
+    container_name: vaultwarden
+    restart: always
+    env_file:
+      - .env
+    labels:
+      caddy: ${VAULT}
+      caddy.reverse_proxy: "{{upstreams}}"
+    environment:
+      - DATABASE_URL=mysql://${MYSQL_USER}:${MYSQL_PASSWORD}@mariadb/${MYSQL_DATABASE}
+    volumes:
+      - vaultwarden_vol:/data/
+    networks:
+      - vw_net
+    depends_on:
+      - mariadb
+      - caddy
+
+  caddy:
+    image: lucaslorentz/caddy-docker-proxy:ci-alpine
+    container_name: reverse-proxy
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - ${CADDY_HTTP_PORT}:${HTTP_REDIRECT}
+      - ${CADDY_HTTPS_PORT}:${HTTPS_REDIRECT}
+    environment:
+      - CADDY_INGRESS_NETWORKS=vw_net
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - caddy_vol:/data/
+    networks:
+      - vw_net
+
+networks:
+  vw_net:
+    external: true
+volumes:
+  vaultwarden_vol: {}
+  mariadb_vol: {}
+  caddy_vol: {}
